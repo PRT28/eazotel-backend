@@ -9,6 +9,8 @@ const mongoose = require('mongoose')
 
 const { authenticate } = require("./middleware/auth");
 
+const authRoutes = require("./routes/authRoutes");
+
 const app = express();
 
 app.use(cors({
@@ -19,15 +21,7 @@ app.use(express.json());
 app.use(helmet())
 app.use(cookieParser());
 
-app.use((req, res, next) => {
-  if (req.path.includes('send-otp') || req.path.includes('verify-otp')) {
-    next();
-  } else {
-    authenticate(req, res, next);
-  }
-});
-
-
+app.use('/auth', authRoutes);
 
 const PORT = process.env.PORT || 3000;
 
