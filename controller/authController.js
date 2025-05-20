@@ -3,12 +3,9 @@ const { default: axios } = require('axios');
 const User = require('../models/User');
 const { createToken } = require('../utils/jwt');
 const Hotel = require('../models/Hotel');
+const { twilio } = require('../utils/twilio');
 
-const otpLessHeaders = headers = {
-    "clientId": process.env.CLIENT_ID,
-    "clientSecret": process.env.CLIENT_SECRET,
-    "Content-Type": "application/json",
-}
+const currentOtps = {}
 
 const sendOtp = async (req, res) => {
   try {
@@ -16,18 +13,20 @@ const sendOtp = async (req, res) => {
     if (!(phoneNumber || phoneCode)) {
       return res.status(400).json({ message: 'Phone number and phone code are required' });
     }
-    const otpLessBody = {
-        phoneNumber: phoneCode + phoneNumber,
-        channel: "SMS",
-        otpLength: 6,
-        expiry: 60
-    }
-    
-   axios.post("https://auth.otpless.app/auth/otp/v1/send", otpLessBody, { headers: otpLessHeaders })
-    .then(response => {
+
+    const otp = generateUniqueOTP();
+    twilio.messages
+    .create({
+      body: `Your OTP is: ${otp}`,
+      to: `+${phoneCode}${phoneNumber}`, // Text your number
+      from: process.env.TWILIO_NUMBER, // From a valid Twilio number
+    })
+    .then((message) => {
+        currentOtps[phoneNumber] = otp;
         res.status(200).json({
             message: 'OTP sent successfully',
-            data: response.data
+            data: response.data,
+            sid: message.sid
         })
     })
     .catch(error => {
@@ -35,7 +34,8 @@ const sendOtp = async (req, res) => {
             message: 'Error sending OTP',
             error: error.message
         })
-    })
+    });
+    
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
@@ -44,58 +44,15 @@ const sendOtp = async (req, res) => {
 
 const verifyOtp = async (req, res) => {
     try{
-    const {requestId, otp, phoneNumber, phoneCode} = req.body;
-    if (!(requestId || otp)) {
-      return res.status(400).json({ message: 'RequestID and OTP are required' });
+    const { otp, phoneNumber, phoneCode} = req.body;
+    if (!( otp || phoneNumber || phoneCode )) {
+      return res.status(400).json({ message: 'Phone Number and OTP are required' });
     }
-    
-   axios.post("https://auth.otpless.app/auth/otp/v1/send", {
-    requestId,
-    otp
-   }, { headers: otpLessHeaders })
-    .then(response => {
-
-        User.findOne({
-            phoneNum: phoneCode + phoneNumber
-        })
-        .then(user => {
-            if (user) {
-                const token = createToken(user);
-
-                res.status(200).json({
-                    message: 'OTP verified successfully',
-                    data: response.data,
-                    token: token,
-                    user: user,
-                    success: true
-                })
-            } else {
-
-                res.status(200).json({
-                    message: 'OTP verified successfully',
-                    data: response.data,
-                    token: null,
-                    user: null,
-                    success: true
-                })
-                
-            }
-        })
-        .catch(error => {
-            res.status(500).json({
-                message: 'Error finding user',
-                error: error.message,
-                success: false
-            })
-        })
-    })
-    .catch(error => {
-        res.status(500).json({
-            message: 'Error validating OTP',
-            error: error.message,
-            success: false
-        })
-    })
+    if (currentOtps[phoneNumber] === otp) {
+    } else {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+  
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal server error', error: error.message, success: false });
@@ -156,38 +113,5 @@ const listAllHotels = async (req, res) => {
     }
 }
 
-const createNewHotel = async (req, res) => {
-    try {
-        const {name, address, city, state, country, zipCode, phone, email} = req.body;
-        if (!(name || address || city || state || country || zipCode || phone || email)) {
-          return res.status(400).json({ message: 'All fields are required' });
-        }
-        const hotel = await Hotel.create({
-            name,
-            address,
-            city,
-            state,
-            country,
-            zipCode,
-            phone,
-            email
-        })
-        if (hotel) {
-            res.status(200).json({
-                message: 'Hotel created successfully',
-                data: hotel,
-                success: true
-            })
-        } else {
-            res.status(400).json({
-                message: 'Error creating hotel',
-                success: false
-            })
-        }
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Internal server error', error: error.message, success: false });
-    }
-}
 
-module.exports = { sendOtp, verifyOtp, createNewUser, listAllHotels, createNewHotel };
+module.exports = { sendOtp, verifyOtp, createNewUser, listAllHotels };

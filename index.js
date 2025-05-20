@@ -7,9 +7,10 @@ const cookieParser = require("cookie-parser")
 const mongoose = require('mongoose')
 
 
-const { authenticate } = require("./middleware/auth");
+const { protect } = require("./middleware/authMiddleware");
 
 const authRoutes = require("./routes/authRoutes");
+const leadRoutes = require("./routes/leadRoutes");
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use(helmet())
 app.use(cookieParser());
 
 app.use('/auth', authRoutes);
+app.use('/leads', protect, leadRoutes);
 
 const PORT = process.env.PORT || 3000;
 
